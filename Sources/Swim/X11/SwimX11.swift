@@ -27,10 +27,21 @@
 import CXCB
 
 class SwimX11Window: SwimWindow {
-    var size: SwimSize = SwimSize(640, 480)
     private let windowId: UInt32
     let connection: OpaquePointer
     
+    var size: SwimSize {
+        get {
+            return SwimSize(0, 0)
+        }
+        
+        set {
+            xcb_configure_window(connection,
+                                 windowId,
+                                 UInt16(XCB_CONFIG_WINDOW_WIDTH.rawValue | XCB_CONFIG_WINDOW_HEIGHT.rawValue),
+                                 [UInt32(newValue.width), UInt32(newValue.height)])
+        }
+    }
     
     var title: String {
         get {
@@ -45,8 +56,6 @@ class SwimX11Window: SwimWindow {
             let reply = xcb_get_property_reply(connection, cookie, nil)
             
             if reply != nil {
-                let len = xcb_get_property_value_length(reply)
-                
                 let name = xcb_get_property_value(reply)
                 let nameString = String(cString: UnsafePointer<CChar>(name!.assumingMemoryBound(to: CChar.self)))
                 return nameString
