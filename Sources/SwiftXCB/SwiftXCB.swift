@@ -29,39 +29,67 @@ import Foundation
 
 
 public class SwiftXCB {
+    let display: OpaquePointer
+    let xScreen: Int32
     let connection: OpaquePointer
     let screen: xcb_screen_t
+    var window: XCBGLWindow?
     
     // MARK: Initializers
     public init() throws {
-        guard let conn = xcb_connect(nil, nil) else {
+        guard let display = XOpenDisplay(nil) else {
+            throw SwiftXCBError.general("Cannot open display)")
+        }
+        
+        self.display = display
+        let defaultScreen = XDefaultScreen(display)
+        
+        guard let conn = XGetXCBConnection(display) else {
             throw SwiftXCBError.cannotConnect
         }
         
         connection = conn
+        
+        XSetEventQueueOwner(display, XCBOwnsEventQueue)
         
         guard let setup = xcb_get_setup(connection) else {
             throw SwiftXCBError.general("Cannot get setup")
         }
         
         // Get the first screen
-        let iterator = xcb_setup_roots_iterator(setup)
+        var iterator = xcb_setup_roots_iterator(setup)
         
-        guard let scr = iterator.data else {
+        var screenNum = defaultScreen
+        var scr = iterator.data
+        while iterator.rem > 0 && screenNum > 0 {
+            scr = iterator.data
+            screenNum -= 1
+            xcb_screen_next(&iterator)
+        }
+        
+        xScreen = defaultScreen
+        
+        guard let s = scr else {
             throw SwiftXCBError.general("Unable to get first screen")
         }
         
-        screen = scr.pointee
+        screen = s.pointee
     }
     
     deinit {
-        xcb_disconnect(connection)
+        XCloseDisplay(display)
     }
     
     // MARK: Window management
     
     public func createWindow(size: XCBSize) -> XCBWindow {
         let window = XCBWindow(connection: connection, screen: screen, size: size)
+        return window
+    }
+    
+    public func createGLWindow(size: XCBSize) -> XCBGLWindow {
+        let window = XCBGLWindow(connection: connection, screen: screen, size: size, display: display, screenNum: xScreen)
+        self.window = window
         return window
     }
     
@@ -105,6 +133,16 @@ public class SwiftXCB {
             if let button = XCBMouseButton(xcbButton: buttonEvent.detail) {
                 return XCBEvent.mouseUp(button)
             }
+            
+        case XCB_MOTION_NOTIFY:
+            let motionEvent = e.withMemoryRebound(to: xcb_motion_notify_event_t.self, capacity: MemoryLayout<xcb_motion_notify_event_t>.size) {
+                return $0.pointee
+            }
+            
+            return XCBEvent.mouseMoved(x: Int(motionEvent.event_x), y: Int(motionEvent.event_y))
+            
+        case XCB_EXPOSE:
+            window?.draw()
             
         default:
             break

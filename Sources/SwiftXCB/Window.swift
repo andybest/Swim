@@ -29,8 +29,8 @@ import CXCB
 
 
 public class XCBWindow {
-    private let connection: OpaquePointer
-    private let windowId: UInt32
+    internal var connection: OpaquePointer
+    internal var windowId: UInt32
     
     // MARK: Properties
     
@@ -66,6 +66,11 @@ public class XCBWindow {
     }
     
     // MARK: Initialization
+    
+    internal init(connection: OpaquePointer, windowId: UInt32) {
+        self.connection = connection
+        self.windowId = windowId
+    }
     
     internal init(connection: OpaquePointer, screen: xcb_screen_t, size: XCBSize) {
         self.connection = connection
@@ -149,5 +154,113 @@ public class XCBWindow {
         }
         
         xcb_flush(connection)
+    }
+}
+
+public class XCBGLWindow: XCBWindow {
+    internal let glxWindow: UInt
+    internal let display: OpaquePointer
+    internal let context: GLXContext
+    
+    internal init(connection: OpaquePointer, screen: xcb_screen_t, size: XCBSize, display: OpaquePointer, screenNum: Int32) {
+        var visualID: Int32 = 0
+        
+        var numConfigs: Int32 = 0
+        guard let fbConfigs = glXGetFBConfigs(display, screenNum, &numConfigs), numConfigs > 0 else {
+            fatalError("Unable to get framebuffer configs")
+        }
+        
+        let fbConfig = fbConfigs[0]
+        glXGetFBConfigAttrib(display, fbConfig, GLX_VISUAL_ID, &visualID)
+        
+        guard let context = glXCreateNewContext(display, fbConfig, GLX_RGBA_TYPE, nil, 1) else {
+            fatalError("Unable to create GLX Context")
+        }
+        
+        let colormap: xcb_colormap_t = xcb_generate_id(connection)
+        let window: xcb_window_t = xcb_generate_id(connection)
+        
+        // Colormap
+        xcb_create_colormap(
+            connection,
+            UInt8(XCB_COLORMAP_ALLOC_NONE.rawValue),
+            colormap,
+            screen.root,
+            xcb_visualid_t(visualID))
+        
+        
+        let eventmask = XCB_EVENT_MASK_EXPOSURE.rawValue | XCB_EVENT_MASK_KEY_PRESS.rawValue
+        let valuelist: [UInt32] = [
+            UInt32(XWhitePixel(display, screenNum)),
+            UInt32(XWhitePixel(display, screenNum)),
+            eventmask,
+            colormap  ]
+        let valuemask: UInt32 = XCB_CW_BACK_PIXEL.rawValue |
+            XCB_CW_COLORMAP.rawValue |
+            XCB_CW_BORDER_PIXEL.rawValue |
+            XCB_CW_EVENT_MASK.rawValue
+        
+        xcb_create_window(
+            connection,
+            UInt8(XCB_COPY_FROM_PARENT),
+            window,
+            screen.root,
+            0,
+            0,
+            150,
+            150,
+            0,
+            UInt16(XCB_WINDOW_CLASS_INPUT_OUTPUT.rawValue),
+            xcb_visualid_t(visualID),
+            valuemask,
+            valuelist)
+        
+        var drawable: GLXDrawable = 0
+        
+        let glxwindow = glXCreateWindow(display, fbConfig, Window(window), nil)
+        if glxwindow == 0 {
+            xcb_destroy_window(connection, window)
+            glXDestroyContext(display, context)
+            fatalError("Unable to create GLX window")
+        }
+        
+        xcb_map_window(connection, window)
+        xcb_flush(connection)
+        
+        drawable = glxwindow
+        if glXMakeContextCurrent(display, drawable, drawable, context) == 0 {
+            xcb_destroy_window(connection, window)
+            glXDestroyContext(display, context)
+            fatalError("Unable to make GLX context current")
+        }
+        
+        self.glxWindow = glxwindow
+        self.display = display
+        self.context = context
+        
+        super.init(connection: connection, windowId: window)
+        
+        glGetString(GLenum(GL_VERSION)).withMemoryRebound(to: CChar.self, capacity: MemoryLayout<CChar>.size) {
+            print("GL Version: \(String(cString: $0, encoding: .ascii)!)")
+        }
+        
+    }
+    
+    deinit {
+        glXDestroyWindow(display, glxWindow)
+        xcb_destroy_window(connection, windowId)
+        glXDestroyContext(display, context)
+    }
+    
+    func draw() {
+        glMatrixMode(GLenum(GL_PROJECTION))
+        glLoadIdentity()
+        glOrtho(0.0, GLdouble(640), GLdouble(480), 0, 1.0, -1.0)
+        
+        glMatrixMode(GLenum(GL_MODELVIEW))
+        glLoadIdentity()
+        
+        glClearColor(1.0, 0.0, 0.0, 1.0)
+        glXSwapBuffers(display, glxWindow)
     }
 }

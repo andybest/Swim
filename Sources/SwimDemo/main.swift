@@ -25,6 +25,7 @@
  */
 
 import Swim
+import CXCB
 
 let swim = Swim.shared
 let window = swim.createWindow(size: SwimSize(width: 640, height: 480), title: "Swim!")

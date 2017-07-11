@@ -57,6 +57,7 @@ extension XCBEvent {
         case .keyUp(keyCode: let keyCode): return .keyUp(keyCode: keyCode)
         case .mouseDown(let button): return .mouseDown(button.toSwimButton())
         case .mouseUp(let button): return .mouseDown(button.toSwimButton())
+        case .mouseMoved(x: let x, y: let y): return .mouseMoved(delta: (x: 0, y: 0), absolute: (x: Double(x), y: Double(y)), window: nil)
             
         default: return nil
         }
@@ -97,7 +98,7 @@ class SwimX11: SwimProtocol {
     }
     
     func createWindow(size: SwimSize, title: String) -> SwimWindow {
-        let xcbwindow = xcb.createWindow(size: size.xcbSize())
+        let xcbwindow = xcb.createGLWindow(size: size.xcbSize())
         
         let window = SwimX11Window(window: xcbwindow)
         window.title = title

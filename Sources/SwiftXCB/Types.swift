@@ -68,7 +68,7 @@ public enum XCBEvent {
     case quit
     case keyDown(keyCode: UInt16)
     case keyUp(keyCode: UInt16)
-    //case mouseMoved(delta: (x: Double, y: Double), absolute: (x: Double, y: Double), window: SwimWindow?)
+    case mouseMoved(x: Int, y: Int)
     case mouseUp(XCBMouseButton)
     case mouseDown(XCBMouseButton)
     case mouseDragged(XCBMouseButton)
