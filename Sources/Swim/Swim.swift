@@ -26,6 +26,10 @@
 
 import Foundation
 
+public enum SwimError: Error {
+    case general(String)
+}
+
 public protocol SwimProtocol {
     func createWindow(size: SwimSize, title: String) -> SwimWindow
     func sendEvent(_ e: SwimEvent)
@@ -49,6 +53,7 @@ public struct SwimSize {
 
 public protocol SwimWindow {
     var size: SwimSize { get set }
+    var title: String { get set }
     func isEqual(_ window: SwimWindow) -> Bool
 }
 
@@ -59,6 +64,7 @@ public func ==<T: SwimWindow>(lhs: T, rhs: T) -> Bool {
 public enum SwimMouseButton {
     case left
     case right
+    case middle
 }
 
 public enum SwimEvent {
@@ -75,7 +81,11 @@ public enum SwimEvent {
 public struct Swim {
     public static let shared: SwimProtocol = {
         #if os(OSX)
-            return SwimX11()//SwimCocoa()
+            do {
+                return try SwimX11()//SwimCocoa()
+            } catch {
+                fatalError(String(describing: error))
+            }
         #else
             fatalError("Unsupported Swim platform!")
         #endif

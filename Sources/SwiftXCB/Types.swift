@@ -24,27 +24,53 @@
  
  */
 
-import Swim
+import CXCB
 
-let swim = Swim.shared
-let window = swim.createWindow(size: SwimSize(width: 640, height: 480), title: "Swim!")
 
-var quit = false
+enum SwiftXCBError: Error {
+    case cannotConnect
+    case general(String)
+}
 
-while !quit {
-    guard let event = swim.pollEvent() else {
-        continue
-    }
+
+public struct XCBSize {
+    public var width: Int
+    public var height: Int
     
-    switch event {
-    case .quit:
-        quit = true
-    case .windowClosed(let win):
-        if window.isEqual(win) {
-            quit = true
-        }
-        
-    default:
-        print(String(describing: event))
+    public init(_ width: Int, _ height: Int) {
+        self.width = width
+        self.height = height
     }
+}
+
+public enum XCBMouseButton {
+    case left
+    case right
+    case middle
+    
+    init?(xcbButton: xcb_button_t) {
+        switch xcbButton {
+        case 1:
+            self = .left
+            
+        case 2:
+            self = .middle
+            
+        case 3:
+            self = .right
+            
+        default: return nil
+        }
+    }
+}
+
+public enum XCBEvent {
+    case quit
+    case keyDown(keyCode: UInt16)
+    case keyUp(keyCode: UInt16)
+    //case mouseMoved(delta: (x: Double, y: Double), absolute: (x: Double, y: Double), window: SwimWindow?)
+    case mouseUp(XCBMouseButton)
+    case mouseDown(XCBMouseButton)
+    case mouseDragged(XCBMouseButton)
+    case windowClosed(XCBMouseButton)
 }

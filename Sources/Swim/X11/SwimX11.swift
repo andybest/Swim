@@ -24,83 +24,60 @@
  
  */
 
-import CXCB
+import SwiftXCB
+
+extension SwimSize {
+    init(_ xcbSize: XCBSize) {
+        self.width = Double(xcbSize.width)
+        self.height = Double(xcbSize.height)
+    }
+    
+    func xcbSize() -> XCBSize {
+        return XCBSize(Int(self.width), Int(self.height))
+    }
+}
+
+extension XCBMouseButton {
+    func toSwimButton() -> SwimMouseButton {
+        switch self {
+        case .left:
+            return .left
+        case .right:
+            return .right
+        case .middle:
+            return .middle
+        }
+    }
+}
+
+extension XCBEvent {
+    func toSwimEvent() -> SwimEvent? {
+        switch self {
+        case .keyDown(keyCode: let keyCode): return .keyDown(keyCode: keyCode)
+        case .keyUp(keyCode: let keyCode): return .keyUp(keyCode: keyCode)
+        case .mouseDown(let button): return .mouseDown(button.toSwimButton())
+        case .mouseUp(let button): return .mouseDown(button.toSwimButton())
+            
+        default: return nil
+        }
+    }
+}
 
 class SwimX11Window: SwimWindow {
-    private let windowId: UInt32
-    let connection: OpaquePointer
+    internal let window: XCBWindow
     
     var size: SwimSize {
-        get {
-            return SwimSize(0, 0)
-        }
-        
-        set {
-            xcb_configure_window(connection,
-                                 windowId,
-                                 UInt16(XCB_CONFIG_WINDOW_WIDTH.rawValue | XCB_CONFIG_WINDOW_HEIGHT.rawValue),
-                                 [UInt32(newValue.width), UInt32(newValue.height)])
-        }
+        get { return SwimSize(window.size) }
+        set { window.size = newValue.xcbSize() }
     }
     
     var title: String {
-        get {
-            let cookie = xcb_get_property(connection,
-                             0,
-                             windowId,
-                             XCB_ATOM_WM_NAME.rawValue,
-                             XCB_ATOM_STRING.rawValue,
-                             0,
-                             0)
-            
-            let reply = xcb_get_property_reply(connection, cookie, nil)
-            
-            if reply != nil {
-                let name = xcb_get_property_value(reply)
-                let nameString = String(cString: UnsafePointer<CChar>(name!.assumingMemoryBound(to: CChar.self)))
-                return nameString
-            }
-            
-            return ""
-        }
-        
-        set {
-            xcb_change_property(connection,
-                                UInt8(XCB_PROP_MODE_REPLACE.rawValue),
-                                windowId,
-                                XCB_ATOM_WM_NAME.rawValue,
-                                XCB_ATOM_STRING.rawValue,
-                                8,
-                                UInt32(newValue.count),
-                                newValue.cString(using: .utf8))
-            xcb_flush(connection)
-        }
+        get { return window.title }
+        set { window.title = newValue }
     }
     
-    init(connection: OpaquePointer!, screen: UnsafeMutablePointer<xcb_screen_t>, size: SwimSize, title: String) {
-        self.connection = connection
-        windowId = xcb_generate_id(connection)
-        xcb_create_window(connection,
-                          UInt8(XCB_COPY_FROM_PARENT),
-                          windowId,
-                          screen.pointee.root,
-                          0,
-                          0,
-                          UInt16(size.width),
-                          UInt16(size.height),
-                          10,
-                          UInt16(XCB_WINDOW_CLASS_INPUT_OUTPUT.rawValue),
-                          screen.pointee.root_visual,
-                          0,
-                          nil)
-        
-        xcb_map_window(connection, windowId)
-        xcb_flush(connection)
-        
-        self.title = title
-        
-        //xcb_configure_window(connection, windowId, UInt16(XCB_CONFIG_WINDOW_WIDTH.rawValue | XCB_CONFIG_WINDOW_HEIGHT.rawValue), [UInt32(320), UInt32(240)])
-        //xcb_flush(connection)
+    init(window: XCBWindow) {
+        self.window = window
     }
     
     func isEqual(_ window: SwimWindow) -> Bool {
@@ -109,30 +86,30 @@ class SwimX11Window: SwimWindow {
 }
 
 class SwimX11: SwimProtocol {
-    let connection: OpaquePointer
-    let screen: UnsafeMutablePointer<xcb_screen_t>
+    let xcb: SwiftXCB
     
-    init() {
-        connection = xcb_connect(nil, nil)
-        
-        let setup = xcb_get_setup(connection)
-        let iterator = xcb_setup_roots_iterator(setup)
-        screen = iterator.data
-    }
-    
-    deinit {
-        xcb_disconnect(connection)
+    init() throws {
+        do {
+            xcb = try SwiftXCB()
+        } catch {
+            throw SwimError.general("Unable to create XCB connection")
+        }
     }
     
     func createWindow(size: SwimSize, title: String) -> SwimWindow {
-        return SwimX11Window(connection: connection, screen: screen, size: size, title: title)
+        let xcbwindow = xcb.createWindow(size: size.xcbSize())
+        
+        let window = SwimX11Window(window: xcbwindow)
+        window.title = title
+        
+        return window
     }
     
     func sendEvent(_ e: SwimEvent) {
     }
     
     func pollEvent() -> SwimEvent? {
-        return nil
+        return xcb.pollEvent()?.toSwimEvent()
     }
     
     
